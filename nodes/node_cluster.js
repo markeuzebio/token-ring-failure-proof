@@ -1,5 +1,5 @@
 const zmq = require("zeromq");
-const os = require("os");
+const net = require("net");
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 // Pre-set usando kubernetes
@@ -35,7 +35,6 @@ const CLIENT_SEND = `tcp://localhost:${CLIENT_SEND_PORT_BASE.concat(NODE_ID)}`;
 
 const receivedBuffer = [];
 const processedBuffer = [];
-let allNodesUp = false;
 
 // Função para receber a msg do cliente
 async function clientReceiverThread() {
@@ -117,9 +116,11 @@ async function tokenCreatorThread() {
     }
 }
 
+// Futuramente irá mandar uma requisição ao cluster store
 async function requestProcessingThread(message) {
-    await sleep(Math.random() * 800 + 200);
-    console.log(`[Nó ${NODE_ID}] Requisição processada ${message[1]}`);
+    console.log(`[Nó ${NODE_ID}] Operação requisitada ${message[2]}`);
+    // await sleep(Math.random() * 800 + 200);
+    // console.log(`[Nó ${NODE_ID}] Requisição processada ${message[1]}`);
     return message;
 }
 

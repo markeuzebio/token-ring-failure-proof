@@ -12,8 +12,11 @@ class StoreNode {
 
     startServer() {
         const server = net.createServer(socket => {
+            this.logMessage(`New connection from [${socket.remoteAddress}:${socket.remotePort}]`);
+
             socket.on('data', async data => {
                 const message = JSON.parse(data);
+
                 if (message.type === 'read') {
                     this.logMessage(`Recebeu: operação de read do cliente ${message.clientId}`);
                     socket.write(JSON.stringify(this.data));
@@ -22,17 +25,17 @@ class StoreNode {
                         await this.handleWrite(message.clientId, Math.random());
                         socket.write('Write completed');
                     } else {
-                        socket.write('Error: Write must go to primary');
+                        socket.write(JSON.stringify('Error: Write must go to primary'));
                     }
                 } else if (message.type === 'update' && !this.isPrimary) {
                     this.data = message.data;
-                    console.log(`Backup ${this.id} updated`);
+                    this.logMessage(`Updatado!`);
                     socket.write('ACK');
                 }
             });
         });
         server.listen(this.port, () => {
-            console.log(`StoreNode ${this.id} listening on port ${this.port}`);
+            this.logMessage(`Escutando na porta ${this.port}`);
         });
     }
 
@@ -56,16 +59,21 @@ class StoreNode {
 
     // Propaga a atualização para os backups
     sendUpdate(port, data) {
-        return new Promise((resolve) => {
+        return new Promise((resolve, reject) => {
             const client = net.createConnection({ port }, () => {
                 client.write(JSON.stringify({ type: 'update', data }));
             });
+
             client.on('data', data => {
+                if(data.toString() == "ACK")
+                    this.logMessage("Temos um ACK");
+
                 resolve(data.toString());
                 client.end();
             });
+
             client.on('error', (err) => {
-                console.error(`Error sending update to port ${port}: ${err.message}`);
+                this.logErrorMessage(`Error sending update to port ${port}: ${err.message}`);
                 resolve('Error');
             });
         });
@@ -74,6 +82,10 @@ class StoreNode {
     // Padroniza mensagens de log em [Store ${id}]: 
     logMessage(msg) {
         console.log(`[STORE ${this.id}${this.isPrimary ? " (PRIMÁRIO)" : ""}]: ${msg}`);
+    }
+
+    logErrorMessage(msg) {
+        console.error(`[STORE ${this.id}${this.isPrimary ? " (PRIMÁRIO)" : ""}]: ${msg}`);
     }
 }
 

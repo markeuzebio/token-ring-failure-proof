@@ -32,7 +32,7 @@ async function sendRequest() {
     while (true) {
         count++;
         const timestamp = Date.now(); // timestamp do no
-        const msg = [`Pedido ${count} cliente ${NODE_ID}`, timestamp]; // mensagem a ser enviada
+        const msg = [`Pedido ${count} cliente ${NODE_ID}`, timestamp, Math.random() > 0.5 ? "write" : "read"]; // mensagem a ser enviada
         await socket.send(JSON.stringify(msg)); // envia a mensagem
         console.log(`[Cliente ${NODE_ID}] Enviou: pedido ${count} | timestamp: ${timestamp}`); // pedido foi enviado
         await new Promise(resolve => setTimeout(resolve, 3000)); // aguarda 3 segundos antes de enviar a proxima msg
