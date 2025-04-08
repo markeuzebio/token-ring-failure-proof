@@ -1,6 +1,6 @@
 const zmq = require("zeromq");
 const net = require("net");
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const { sleep, ping } = require("../utils/utils");
 
 // Pre-set usando kubernetes
 {
@@ -34,6 +34,7 @@ const CLIENT_RECEIVE = `tcp://localhost:${CLIENT_RECEIVE_PORT_BASE.concat(NODE_I
 const CLIENT_SEND = `tcp://localhost:${CLIENT_SEND_PORT_BASE.concat(NODE_ID)}`;
 let TOTAL_STORES = 3;
 let STORE_PORTS = [4000, 4001, 4002]; // Porta no indíce 0 sempre sera a de escrita
+let PRIMARY_STORE_PORT = 4000;
 
 const receivedBuffer = [];
 const processedBuffer = [];
@@ -84,7 +85,10 @@ async function tokenReceiverThread() {
                 
                 while (receivedBuffer.length > 0) {
                     const request = receivedBuffer.shift(); // processa todos os pedidos do cliente no buffer recebido e armazena no receveid
-                    processedBuffer.push(await requestProcessingThread(request));
+                    const request_processed_message = await requestProcessingThread(request);
+
+                    if(request_processed_message != "")
+                        processedBuffer.push(request_processed_message);
                 }
                 
                 token[NODE_ID] = ["", -1];
@@ -139,14 +143,85 @@ async function accessResource(operation, store_port) {
     });
 }
 
+// Responsável por retonar as portas dos stores que estão respondendo aos pings, somente
+async function getAliveStores(dead_store) {
+    const alive_ports = await Promise.all (
+        STORE_PORTS.map(async (port) => {
+            if(port != dead_store) {
+                const result = await ping("localhost", port, 3, 2000);
+    
+                if(result.status == "alive")
+                    return port;
+            }
+    
+            return null;
+        })
+    );
+
+    return alive_ports.filter(Boolean);  
+}
+
+async function sendSuspiciousNextStore(store_port, dead_store_port) {
+    return new Promise((resolve) => {
+        const store_socket = net.createConnection({ port: store_port, host: "localhost" }, () => {
+            store_socket.write(JSON.stringify({type: "suspicious", store_port: dead_store_port}));
+        });
+
+        store_socket.once("data", payload => {
+            const data = JSON.parse(payload);
+
+            // Se enviar um ACK significa que a STORE de porta ${dead_store_port} realmente não ouve mais
+            if(data.status = "ACK") {
+                STORE_PORTS = STORE_PORTS.filter(store_port => store_port != dead_store_port);
+                TOTAL_STORES--;
+
+                // Se a porta que não ouve mais é a do STORE primário, atualiza-o
+                if(dead_store_port == PRIMARY_STORE_PORT)
+                    PRIMARY_STORE_PORT = store_port;
+            }
+
+            store_socket.end();
+            resolve(data);
+        });
+    });
+}
+
 async function requestProcessingThread(message) {
     const operation = message[2];
-    const request_store_port = operation == "read" ? STORE_PORTS[Math.floor(Math.random() * TOTAL_STORES)] : STORE_PORTS[0];
+    const request_store_port = operation == "read" ? STORE_PORTS[Math.floor(Math.random() * TOTAL_STORES)] : PRIMARY_STORE_PORT;
 
     try {
-        const store_response = await accessResource(operation, request_store_port);
-        await sleep(Math.random() * (1000 - 200) + 200); // Simula um atraso de execução entre 200ms e 1s
-        return store_response;
+        console.log(`[Nó ${NODE_ID}] Tentando acessar o STORE de porta ${request_store_port}`);
+        const result = await ping("localhost", request_store_port, 3, 2000);
+
+        // Caso não tenha sido possível se comunicar com a porta especificada do store port
+        if(result.status == "dead") {
+            console.log(`[Nó ${NODE_ID}] Não foi possível acessar o STORE de porta ${request_store_port} após tentativas`);
+            const alive_ports = await getAliveStores();
+
+            // Se ainda há STORES ativos e respondendo sadiamente
+            if(alive_ports.length > 0) {
+                console.log(`[Nó ${NODE_ID}] Mandando operação de SUSPICIOUS para store de porta [${alive_ports[0]}] sobre store de porta ${request_store_port}`);
+                const store_response = await sendSuspiciousNextStore(alive_ports[0], request_store_port);
+
+                if(store_response.status == "ACK") {
+                    console.log(`[Nó ${NODE_ID}] Alterou o ARRAY de STORES ativos: ${STORE_PORTS}`);
+                } else {
+                    console.log(`[Nó ${NODE_ID}] ${store_response.response}`);
+                }
+
+                // Retorna uma mensagem vazia, indicando que uma reconfiguração foi feita e a tentativa de request deve ser feita no futuro
+                // obedecendo a nova configuração
+                return "";
+            } else {
+                return "Todos os stores estão inativos. Não é possível realizar operação";
+            }
+        } else {
+            console.log(`[Nó ${NODE_ID}] Conexão ao STORE de porta ${request_store_port} bem sucedida!`);
+            const store_response = await accessResource(operation, request_store_port);
+            await sleep(Math.random() * (1000 - 200) + 200); // Simula um atraso de execução entre 200ms e 1s
+            return store_response;
+        }
     } catch(err) {
         console.log(err.message);
         return err.message;
