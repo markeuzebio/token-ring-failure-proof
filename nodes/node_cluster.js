@@ -61,7 +61,7 @@ async function clientSenderThread() {
             // buffer pega a primeira msg em envia para o cliente e dps fica vazio
             const msg = processedBuffer.shift(); // buffer ou acumulador, se nao tiver vazio a funcao remove a primeira msg do buffer
             await sock.send(JSON.stringify(msg)); // converte em json e manda pro cliente 
-            console.log(`[Nó ${NODE_ID}] Enviou resposta para o cliente: ${msg[0]}`);
+            console.log(`[Nó ${NODE_ID}] Enviou resposta para o cliente: ${JSON.stringify(msg)}`);
         }
     }
 }
@@ -145,7 +145,6 @@ async function requestProcessingThread(message) {
 
     try {
         const store_response = await accessResource(operation, request_store_port);
-        console.log(store_response);
         await sleep(Math.random() * (1000 - 200) + 200); // Simula um atraso de execução entre 200ms e 1s
         return store_response;
     } catch(err) {

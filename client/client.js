@@ -46,7 +46,7 @@ async function receiveResponse() {
     
     for await (const [msg] of socket) { //espera msg do socket
         const response = JSON.parse(msg.toString()); // mgs convertida para json
-        console.log(`[Cliente ${NODE_ID}] Resposta recebida: ${response[0]} concluído | timestamp: ${response[1]}`);
+        console.log(`[Cliente ${NODE_ID}] Resposta recebida: ${JSON.stringify(response)} concluído`);
     }
 }
 
