@@ -19,13 +19,13 @@ class StoreNode {
 
                 if (message.type === 'read') {
                     this.logMessage(`Recebeu: operação de read do cliente ${message.clientId}`);
-                    socket.write(JSON.stringify(this.data));
+                    socket.write(JSON.stringify({...this.data, status: "ACK" })); // Operação de read bem-sucedida
                 } else if (message.type === 'write') {
                     if (this.isPrimary) {
                         await this.handleWrite(message.clientId, Math.random());
-                        socket.write('Write completed');
+                        socket.write(JSON.stringify({ status: "ACK" })); // Significa que a operação de write deu certo
                     } else {
-                        socket.write(JSON.stringify('Error: Write must go to primary'));
+                        socket.write(JSON.stringify({ status: "NACK" })); // Significa que a operação de write deve ser enviada para o primario
                     }
                 } else if (message.type === 'update' && !this.isPrimary) {
                     this.data = message.data;
