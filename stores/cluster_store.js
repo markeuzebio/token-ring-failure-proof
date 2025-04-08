@@ -1,4 +1,5 @@
 const net = require('net');
+const { ping } = require("../utils/utils");
 
 class StoreNode {
     constructor(id, port, isPrimary, backupPorts) {
@@ -31,6 +32,56 @@ class StoreNode {
                     this.data = message.data;
                     this.logMessage(`Updatado!`);
                     socket.write('ACK');
+                } else if (message.type === 'suspicious') {
+                    this.logMessage(`Mensagem de SUSPICIOUS recebida para o STORE ${message.store_port}`);
+
+                    // Se a porta informada pelo cliente é a do primário
+                    if(message.store_port == "4000") {
+                        let result = await ping("localhost", message.store_port, 3, 2000);
+
+                        if(result.status == "dead") {
+                            this.logMessage(`Store primário caiu. Renomeando store atual (${this.port}) como novo primário`);
+                            this.isPrimary = true;
+                            this.backupPorts = this.port == "4001" ? [4002] : [4001];
+                            socket.write(JSON.stringify({ status: "ACK" }));
+                        } else {
+                            this.logMessage(`FALSO NEGATIVO PELO CLIENTE!`);
+                            socket.write(JSON.stringify({ status: "NACK", response: "Store informado ainda está ativo!" }));
+                        }
+                    } else {
+                        if(this.isPrimary) {
+                            // Verifica se a porta indicada pelo cliente não existe mais
+                            if(this.backupPorts.find(store_port => store_port == message.store_port) === undefined) {
+                                this.logMessage(`Store informado pelo cliente (${message.store_port}) já não existe mais. Enviando ACK...`);
+                                socket.write(JSON.stringify({ status: "ACK" })); // Manda mensagem de confirmação
+                            } else {
+                                let result = await ping("localhost", message.store_port, 3, 2000);
+
+                                if(result.status == "dead") {
+                                    this.logMessage(`Store ${message.store_port} realmente não responde. Reconfigurando ARRAY de STOREs...`);
+                                    this.backupPorts = this.backupPorts.filter(store_port => store_port != message.store_port);
+                                    this.logMessage(`Array de STOREs atualizado: ${this.backupPorts}`);
+                                    socket.write(JSON.stringify({ status: "ACK" }));
+                                } else {
+                                    this.logMessage(`FALSO NEGATIVO PELO CLIENTE!`);
+                                    socket.write(JSON.stringify({ status: "NACK", response: "Store informado ainda está ativo!" }));
+                                }
+                            }
+                        } else { // Se o store atual não é o primário
+                            // Somente repassa ao primário
+                            const primary_socket = net.createConnection({ port: 4000, host: "localhost" }, () => {
+                                this.logMessage("Repassando mensagem do cliente para o STORE primário");
+                                primary_socket.write(JSON.stringify(message));
+                            });
+
+                            // Ao receber dado do primario, repassa para a mensagem respondida por ele para o cliente 
+                            primary_socket.once("data", data => {
+                                this.logMessage("Redirecionando mensagem do STORE primário para o cliente");
+                                socket.write(data);
+                                primary_socket.end();
+                            });
+                        }
+                    }
                 }
             });
         });
