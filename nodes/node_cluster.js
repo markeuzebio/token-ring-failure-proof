@@ -45,7 +45,7 @@ async function clientReceiverThread() {
 
     for await (const [msg] of sock) {
         const message = JSON.parse(msg.toString()); // converte a msg em string
-        console.log(`[Nó ${NODE_ID}] Recebeu pedido do cliente: ${message[0]} | timestamp: ${message[1]}`);
+        console.log(`[Nó ${NODE_ID}] Recebeu pedido do cliente: ${message[0]} | timestamp: ${message[1]} | operação: ${message[2]}`);
         receivedBuffer.push(message);
     }
 }
