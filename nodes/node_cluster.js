@@ -23,7 +23,8 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
     // const CLIENT_SEND = `tcp://client-node-${NODE_ID}.client-service.default.svc.cluster.local:${CLIENT_PORT}`;
 }
 
-let TOTAL_NODES = 5;
+const TOTAL_NODES = 5;
+const TOTAL_STORES = 3;
 const NODE_ID = +`${process.argv[2]}`;
 const NODES_PORT_BASE = "500";
 const CLIENT_RECEIVE_PORT_BASE = "800";
@@ -32,6 +33,7 @@ const NEXT_NODE = `tcp://localhost:${NODES_PORT_BASE.concat((NODE_ID + 1) % TOTA
 const MY_TOKEN_ADDR = `tcp://localhost:${NODES_PORT_BASE.concat(NODE_ID)}`;
 const CLIENT_RECEIVE = `tcp://localhost:${CLIENT_RECEIVE_PORT_BASE.concat(NODE_ID)}`;
 const CLIENT_SEND = `tcp://localhost:${CLIENT_SEND_PORT_BASE.concat(NODE_ID)}`;
+const STORE_PORTS = [4000, 4001, 4002]; // Porta no indíce 0 sempre sera a de escrita
 
 const receivedBuffer = [];
 const processedBuffer = [];
@@ -116,12 +118,40 @@ async function tokenCreatorThread() {
     }
 }
 
-// Futuramente irá mandar uma requisição ao cluster store
+async function accessResource(operation, store_port) {
+    return new Promise((resolve, reject) => {
+        const client = net.createConnection({ port: store_port, host: "localhost" }, () => {
+            console.log(`[Nó ${NODE_ID}] Mandando operação de ${operation} para store de porta [${store_port}]`);
+            client.write(JSON.stringify({ type: operation, clientId: NODE_ID }));
+        });
+
+        client.once("data", payload => {
+            const data = JSON.parse(payload);
+            console.log(`[Nó ${NODE_ID}] Recebeu ${data.status} de store de porta [${store_port}]`);
+            client.end();
+            resolve(data);
+        });
+
+        client.once("error", err => {
+            client.end();
+            reject(new Error(`[Nó ${NODE_ID}] falhou em acessar store de porta ${store_port}: ${err.message}`))
+        });
+    });
+}
+
 async function requestProcessingThread(message) {
-    console.log(`[Nó ${NODE_ID}] Operação requisitada ${message[2]}`);
-    // await sleep(Math.random() * 800 + 200);
-    // console.log(`[Nó ${NODE_ID}] Requisição processada ${message[1]}`);
-    return message;
+    const operation = message[2];
+    const request_store_port = operation == "read" ? STORE_PORTS[Math.floor(Math.random() * TOTAL_STORES)] : STORE_PORTS[0];
+
+    try {
+        const store_response = await accessResource(operation, request_store_port);
+        console.log(store_response);
+        await sleep(Math.random() * (1000 - 200) + 200); // Simula um atraso de execução entre 200ms e 1s
+        return store_response;
+    } catch(err) {
+        console.log(err.message);
+        return err.message;
+    }
 }
 
 (async () => {
