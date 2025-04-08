@@ -24,7 +24,6 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 const TOTAL_NODES = 5;
-const TOTAL_STORES = 3;
 const NODE_ID = +`${process.argv[2]}`;
 const NODES_PORT_BASE = "500";
 const CLIENT_RECEIVE_PORT_BASE = "800";
@@ -33,7 +32,8 @@ const NEXT_NODE = `tcp://localhost:${NODES_PORT_BASE.concat((NODE_ID + 1) % TOTA
 const MY_TOKEN_ADDR = `tcp://localhost:${NODES_PORT_BASE.concat(NODE_ID)}`;
 const CLIENT_RECEIVE = `tcp://localhost:${CLIENT_RECEIVE_PORT_BASE.concat(NODE_ID)}`;
 const CLIENT_SEND = `tcp://localhost:${CLIENT_SEND_PORT_BASE.concat(NODE_ID)}`;
-const STORE_PORTS = [4000, 4001, 4002]; // Porta no indíce 0 sempre sera a de escrita
+let TOTAL_STORES = 3;
+let STORE_PORTS = [4000, 4001, 4002]; // Porta no indíce 0 sempre sera a de escrita
 
 const receivedBuffer = [];
 const processedBuffer = [];
