@@ -53,7 +53,7 @@ class StoreNode {
             const acks = await Promise.all(
                 this.backupPorts.map(port => this.sendUpdate(port, this.data))
             );
-            console.log(`Primary ${this.id} received all ACKs: ${acks.join(',')}`);
+            this.logMessage(`Recebeu todos os ACKs: ${acks.join(',')}`);
         }
     }
 
@@ -65,9 +65,6 @@ class StoreNode {
             });
 
             client.on('data', data => {
-                if(data.toString() == "ACK")
-                    this.logMessage("Temos um ACK");
-
                 resolve(data.toString());
                 client.end();
             });
